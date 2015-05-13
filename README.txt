@@ -26,3 +26,5 @@ After that sends to client redirect:
 (orig.host.name taken from Host header)
 
 and tcp RST to both client and server.
+
+Tested on kernels: 3.5, 3.13.

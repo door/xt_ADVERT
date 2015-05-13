@@ -22,8 +22,8 @@ MODULE_DESCRIPTION("xtables module redirecting to advertasing page");
 
 #define MAX_HDR 15
 
-#define HTTP_HDR_BUFSIZE 512
-#define REDIRECT_BUF_SIZE 384
+#define HTTP_HDR_BUFSIZE 1450
+#define REDIRECT_BUF_SIZE 256
 
 #define TH_FIN   0x01
 #define TH_RST   0x04
@@ -39,7 +39,7 @@ struct xt_advert_data {
 };
 
 
-// на основе xt_REJECT.c
+// based on xt_REJECT.c
 static
 int
 tcp_send(struct sk_buff *oldskb,
@@ -141,7 +141,9 @@ advert_tg(struct sk_buff *skb, const struct xt_action_param *par)
 	if (nf_ip_checksum(skb, par->hooknum, ip_hdrlen(skb), IPPROTO_TCP))
                 goto pass;
 
-        const struct tcphdr *tcph = tcp_hdr(skb);
+        // const struct tcphdr *tcph = skb_tcp_header(skb, iph);
+        struct tcphdr _tcp;
+        const struct tcphdr *tcph = skb_header_pointer(skb, iph->ihl*4, sizeof(_tcp), &_tcp);
         if (tcph == NULL)
                 // error
                 goto pass;
@@ -180,7 +182,7 @@ advert_tg(struct sk_buff *skb, const struct xt_action_param *par)
 
         // try parse http request header
         {
-                u32 size = min(data_size, sizeof(buf));
+                u32 size = min(data_size, (u32)sizeof(buf));
 
                 if (size < 16)
                         goto pass;
@@ -193,7 +195,6 @@ advert_tg(struct sk_buff *skb, const struct xt_action_param *par)
                 char *e = NULL;
 
                 for (char *p = buf; p < buf + size; h++, p = e + 1) {
-                        // Все ошибки при разборе запроса приводят к пропуску пакета.
                         
                         if (h == MAX_HDR)
                                 goto pass;
@@ -287,7 +288,6 @@ advert_tg(struct sk_buff *skb, const struct xt_action_param *par)
                          ack_seq, seq + data_size,
                          TH_ACK|TH_FIN|TH_PUSH);
 
-                /* // +1 для FIN в предыдущем пакете */
                 tcp_send(skb, NULL, 0,
                          iph->daddr, iph->daddr,
                          tcph->dest, tcph->source,
@@ -314,13 +314,16 @@ int
 advert_tg_checkentry(const struct xt_tgchk_param *par)
 {
         struct xt_advert_tginfo *info = par->targinfo;
-        PDEBUG("interval=%llu", info->interval);
-        PDEBUG("nets count=%u", info->count);
+
+        PDEBUG("url: %s", info->url);
+
+        /* PDEBUG("interval=%llu", info->interval); */
+        /* PDEBUG("nets count=%u", info->count); */
 
         struct ipnet *net = info->ipnets;
         for (int i = 0; i < info->count; i++, net++) {
                 u32 size = ~net->mask + 1;
-                PDEBUG("%d. %pI4h/%d, size=%d", i+1, &net->ip, net->masklen, size);
+                /* PDEBUG("%d. %pI4h/%d, size=%d", i+1, &net->ip, net->masklen, size); */
                 char *p = kmalloc(size, GFP_KERNEL);
                 memset(p, 0, size);
                 info->flags[i] = p;
@@ -342,8 +345,6 @@ advert_tg_destroy(const struct xt_tgdtor_param *par)
                 kfree(info->flags[i]);
 
         kfree(info->data);
-
-        PDEBUG("exit");
 }
 
 

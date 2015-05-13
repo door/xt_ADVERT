@@ -1,0 +1,8 @@
+src/.*
+src/Module.symvers
+*.o
+*.ko
+*.so
+*.mod.c
+modules.order
+*~
